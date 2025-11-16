@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Secure</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Import Map for React & Lucide -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+        }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar for the Logs */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #171717; 
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #404040; 
+            border-radius: 4px;
+        }
+        /* Safe area padding for mobile bottom nav */
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+    </style>
+</head>
+<body class="bg-black text-white">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Flame, Shield, Play, Square, RotateCcw, Plus, Check, AlertTriangle, 
+            Lock, Zap, Music, Upload, Cpu, X, History, Trash2, Wifi, DoorOpen, 
+            Settings2, Smartphone, Signal, CalendarDays, Router, Droplets, Utensils 
+        } from 'lucide-react';
+
+        // --- AUDIO ENGINE ---
+        const playGlitchAlarm = (contextRef) => {
+            if (!contextRef.current) {
+                contextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            const ctx = contextRef.current;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            // Aggressive Square Wave (Nothing OS style sound)
+            osc.type = 'square';
+            const now = ctx.currentTime;
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.setValueAtTime(0, now + 0.1);
+            osc.frequency.setValueAtTime(1200, now + 0.2);
+            osc.frequency.setValueAtTime(0, now + 0.3);
+            
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start();
+            osc.stop(now + 0.5);
+        };
+
+        function NothingUltimate() {
+            const [activeTab, setActiveTab] = useState('MOTOR'); // MOTOR | SAFETY | GAS | RECHARGE
+
+            // --- STATE: SAFETY ---
+            const [safetyItems, setSafetyItems] = useState(() => {
+                const saved = localStorage.getItem('nth_safety');
+                return saved ? JSON.parse(saved) : [
+                { id: 1, label: 'GAS VALVE', icon: 'flame', checked: false },
+                { id: 2, label: 'FRONT DOOR', icon: 'lock', checked: false },
+                { id: 3, label: 'BACK DOOR', icon: 'door', checked: false },
+                { id: 4, label: 'FRONT GATE', icon: 'shield', checked: false },
+                { id: 5, label: 'WIFI ROUTER', icon: 'wifi', checked: false },
+                { id: 6, label: 'CUPBOARD', icon: 'box', checked: false },
+                { id: 7, label: 'SWITCHES', icon: 'zap', checked: false },
+                ];
+            });
+            const [verifiedTime, setVerifiedTime] = useState(() => localStorage.getItem('nth_verified'));
+            const [newSafetyItem, setNewSafetyItem] = useState('');
+            const [isEditingSafety, setIsEditingSafety] = useState(false); 
+
+            // --- STATE: MOTOR & ALARM ---
+            const [activeMotorCategory, setActiveMotorCategory] = useState('TANK'); // 'TANK' or 'COOKING'
+            const [motorDuration, setMotorDuration] = useState(20);
+            const [manualInput, setManualInput] = useState('');
+            const [isMotorRunning, setIsMotorRunning] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(20 * 60);
+            const [alarmTriggered, setAlarmTriggered] = useState(false);
+            const [customAudio, setCustomAudio] = useState(null);
+            
+            const timerRef = useRef(null);
+            const beepIntervalRef = useRef(null);
+            const audioCtxRef = useRef(null);
+            const htmlAudioRef = useRef(null);
+
+            // --- STATE: GAS LOGS ---
+            const [gasLogs, setGasLogs] = useState(() => {
+                const saved = localStorage.getItem('nth_gas_logs');
+                const oldSingleDate = localStorage.getItem('nth_gas');
+                if (saved) return JSON.parse(saved);
+                if (oldSingleDate) return [{ id: Date.now(), date: oldSingleDate }];
+                return [];
+            });
+            const [newGasDate, setNewGasDate] = useState('');
+
+            // --- STATE: RECHARGE ---
+            const [rechargeLogs, setRechargeLogs] = useState(() => {
+                const saved = localStorage.getItem('nth_recharge_logs');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [activeRechargeCategory, setActiveRechargeCategory] = useState('MOBILE'); // 'MOBILE' or 'WIFI'
+            const [recName, setRecName] = useState('');
+            const [recAmount, setRecAmount] = useState('');
+            const [recDate, setRecDate] = useState('');
+            const [recValidity, setRecValidity] = useState('');
+
+            // --- PERSISTENCE ---
+            useEffect(() => {
+                localStorage.setItem('nth_safety', JSON.stringify(safetyItems));
+                if (verifiedTime) localStorage.setItem('nth_verified', verifiedTime);
+                else localStorage.removeItem('nth_verified');
+                
+                localStorage.setItem('nth_gas_logs', JSON.stringify(gasLogs));
+                localStorage.setItem('nth_recharge_logs', JSON.stringify(rechargeLogs));
+            }, [safetyItems, verifiedTime, gasLogs, rechargeLogs]);
+
+            // --- HELPERS ---
+            const formatTimer = (s) => {
+                const m = Math.floor(s / 60).toString().padStart(2, '0');
+                const sec = (s % 60).toString().padStart(2, '0');
+                return `${m}:${sec}`;
+            };
+
+            const handleManualInputChange = (e) => {
+                const val = e.target.value;
+                setManualInput(val);
+                if (val && !isNaN(val)) {
+                    setMotorDuration(parseInt(val));
+                }
+            };
+
+            const toggleMotor = () => {
+                if (isMotorRunning) {
+                setIsMotorRunning(false);
+                setAlarmTriggered(false);
+                clearInterval(timerRef.current);
+                clearInterval(beepIntervalRef.current);
+                if (htmlAudioRef.current) {
+                    htmlAudioRef.current.pause();
+                    htmlAudioRef.current.currentTime = 0;
+                }
+                setTimeLeft(motorDuration * 60);
+                } else {
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                setTimeLeft(motorDuration * 60);
+                setIsMotorRunning(true);
+                setAlarmTriggered(false);
+                }
+            };
+
+            useEffect(() => {
+                if (isMotorRunning && timeLeft > 0) {
+                timerRef.current = setInterval(() => setTimeLeft(p => p - 1), 1000);
+                } else if (isMotorRunning && timeLeft === 0) {
+                clearInterval(timerRef.current);
+                setAlarmTriggered(true);
+                
+                if (customAudio && htmlAudioRef.current) {
+                    htmlAudioRef.current.src = customAudio.url;
+                    htmlAudioRef.current.loop = true;
+                    htmlAudioRef.current.play();
+                } else {
+                    beepIntervalRef.current = setInterval(() => playGlitchAlarm(audioCtxRef), 600);
+                }
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isMotorRunning, timeLeft]);
+
+            // --- SAFETY HELPERS ---
+            const addSafetyItem = () => {
+                if (!newSafetyItem.trim()) return;
+                const newItem = {
+                    id: Date.now(),
+                    label: newSafetyItem.toUpperCase(),
+                    icon: 'shield', 
+                    checked: false
+                };
+                setSafetyItems([...safetyItems, newItem]);
+                setNewSafetyItem('');
+                setVerifiedTime(null); 
+            };
+
+            const deleteSafetyItem = (id) => {
+                const newItems = safetyItems.filter(item => item.id !== id);
+                setSafetyItems(newItems);
+                setVerifiedTime(null);
+            };
+
+            // --- GAS HELPERS ---
+            const addGasLog = () => {
+                if (!newGasDate) return;
+                const newLogs = [...gasLogs, { id: Date.now(), date: newGasDate }]
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
+                setGasLogs(newLogs);
+                setNewGasDate('');
+            };
+
+            const deleteGasLog = (id) => {
+                setGasLogs(gasLogs.filter(log => log.id !== id));
+            };
+
+            const getDaysDiff = (date1, date2) => {
+                const d1 = new Date(date1);
+                const d2 = new Date(date2);
+                return Math.floor(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24));
+            };
+
+            // --- RECHARGE HELPERS ---
+            const addRecharge = () => {
+                if (!recName || !recDate || !recValidity) return;
+                const newLog = {
+                id: Date.now(),
+                name: recName.toUpperCase(),
+                amount: recAmount || '0',
+                date: recDate,
+                validity: parseInt(recValidity),
+                category: activeRechargeCategory // Save current category
+                };
+                const sortedLogs = [...rechargeLogs, newLog].sort((a, b) => {
+                const expA = new Date(a.date); expA.setDate(expA.getDate() + a.validity);
+                const expB = new Date(b.date); expB.setDate(expB.getDate() + b.validity);
+                return expA - expB;
+                });
+                setRechargeLogs(sortedLogs);
+                setRecName(''); setRecAmount(''); setRecDate(''); setRecValidity('');
+            };
+
+            const deleteRecharge = (id) => {
+                setRechargeLogs(rechargeLogs.filter(l => l.id !== id));
+            };
+
+            const getRechargeStatus = (log) => {
+                const start = new Date(log.date);
+                const expiry = new Date(start);
+                expiry.setDate(start.getDate() + log.validity);
+                const now = new Date();
+                now.setHours(0,0,0,0);
+                expiry.setHours(0,0,0,0);
+                
+                const daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+                return { 
+                daysLeft, 
+                expiryDateStr: expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) 
+                };
+            };
+
+
+            const getIcon = (name, cls) => {
+                switch(name) {
+                case 'flame': return <Flame className={cls} />;
+                case 'lock': return <Lock className={cls} />;
+                case 'shield': return <Shield className={cls} />;
+                case 'box': return <Cpu className={cls} />;
+                case 'zap': return <Zap className={cls} />;
+                case 'wifi': return <Wifi className={cls} />;
+                case 'door': return <DoorOpen className={cls} />;
+                default: return <Check className={cls} />;
+                }
+            };
+
+            const DotBorder = () => (
+                <div className="absolute inset-0 border-2 border-dashed border-neutral-800 pointer-events-none rounded-3xl opacity-50"></div>
+            );
+
+            const NavButton = ({ label, active, onClick, icon: Icon }) => (
+                <button onClick={onClick} className={`flex-1 relative h-16 flex flex-col items-center justify-center transition-all duration-300
+                ${active ? 'bg-neutral-900 text-red-600' : 'bg-black text-neutral-600 hover:text-neutral-400'}`}>
+                {active && <div className="absolute top-0 w-full h-[2px] bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]"></div>}
+                <Icon className="w-5 h-5 mb-1" />
+                <span className="text-[9px] font-mono tracking-[0.1em] font-bold uppercase">{label}</span>
+                </button>
+            );
+
+            return (
+                <div className="min-h-screen bg-black text-white font-mono selection:bg-red-600 selection:text-white pb-20 overflow-x-hidden">
+                <audio ref={htmlAudioRef} className="hidden" />
+
+                {/* --- TOP BAR --- */}
+                <div className="flex justify-between items-center p-6 border-b border-neutral-900 sticky top-0 bg-black z-40">
+                    <div className="flex flex-col">
+                    <h1 className="text-2xl font-bold tracking-tight leading-none">HOME<br/><span className="text-red-600">SECURE</span></h1>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {isMotorRunning && <div className="w-2 h-2 bg-red-600 rounded-full animate-ping"></div>}
+                        <div className="text-[10px] text-neutral-500 border border-neutral-800 px-2 py-1 rounded-full">
+                            SYS.ONLINE
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 max-w-lg mx-auto">
+                    
+                    {/* === TAB: MOTOR / COOKING === */}
+                    {activeTab === 'MOTOR' && (
+                    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+                        
+                        {/* CATEGORY SWITCHER */}
+                        <div className="bg-neutral-900/50 p-1 rounded-xl border border-neutral-800 flex mb-2">
+                            <button 
+                                onClick={() => { setActiveMotorCategory('TANK'); setMotorDuration(20); setManualInput(''); }}
+                                disabled={isMotorRunning}
+                                className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2
+                                ${activeMotorCategory === 'TANK' ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'}
+                                ${isMotorRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <Droplets className="w-3 h-3" />
+                                TANK
+                            </button>
+                            <button 
+                                onClick={() => { setActiveMotorCategory('COOKING'); setMotorDuration(10); setManualInput(''); }}
+                                disabled={isMotorRunning}
+                                className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2
+                                ${activeMotorCategory === 'COOKING' ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'}
+                                ${isMotorRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <Utensils className="w-3 h-3" />
+                                COOKING
+                            </button>
+                        </div>
+
+                        {/* TIMER DISPLAY */}
+                        <div className={`relative aspect-square rounded-[3rem] flex flex-col items-center justify-center border-2 transition-all duration-500 overflow-hidden
+                        ${alarmTriggered ? 'border-red-600 bg-red-950/20' : 'border-neutral-800 bg-neutral-950'}`}>
+                        
+                        <div className="absolute inset-0 opacity-20" 
+                                style={{backgroundImage: 'radial-gradient(#333 1px, transparent 1px)', backgroundSize: '20px 20px'}}>
+                        </div>
+                        
+                        {isMotorRunning && !alarmTriggered && (
+                            <div className="absolute w-full h-1 bg-red-600/50 top-1/2 -translate-y-1/2 animate-[spin_4s_linear_infinite] shadow-[0_0_20px_red]"></div>
+                        )}
+
+                        <div className="relative z-10 flex flex-col items-center">
+                            <div className="mb-4 text-neutral-500">
+                                {activeMotorCategory === 'TANK' ? <Droplets className="w-8 h-8" /> : <Flame className="w-8 h-8" />}
+                            </div>
+                            <span className={`text-[5rem] leading-none font-bold tracking-tighter drop-shadow-xl
+                                ${alarmTriggered ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                                {formatTimer(timeLeft)}
+                            </span>
+                            <div className="mt-4 flex gap-2 items-center">
+                                <div className={`w-2 h-2 rounded-full ${isMotorRunning ? 'bg-red-600' : 'bg-neutral-700'}`}></div>
+                                <span className="text-[10px] uppercase tracking-[0.3em] text-neutral-500">
+                                    {alarmTriggered ? "CRITICAL ALERT" : isMotorRunning ? `${activeMotorCategory} ACTIVE` : "SYSTEM READY"}
+                                </span>
+                            </div>
+                        </div>
+                        </div>
+
+                        {!isMotorRunning && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2 bg-neutral-900/50 border border-neutral-800 rounded-2xl p-4 flex items-center justify-between group hover:border-red-900 transition-colors">
+                                    <div className="flex flex-col">
+                                        <label className="text-[10px] text-neutral-500 uppercase tracking-widest mb-1">Manual Entry</label>
+                                        <div className="flex items-baseline gap-1">
+                                            <input 
+                                                type="number" 
+                                                placeholder="00"
+                                                value={manualInput}
+                                                onChange={handleManualInputChange}
+                                                className="w-16 bg-transparent text-3xl font-bold text-white placeholder-neutral-700 focus:outline-none focus:text-red-500 transition-colors"
+                                            />
+                                            <span className="text-xs font-bold text-neutral-600">MIN</span>
+                                        </div>
+                                    </div>
+                                    <div className="w-8 h-8 rounded-full border border-neutral-700 flex items-center justify-center text-neutral-500">
+                                        <Plus className="w-4 h-4" />
+                                    </div>
+                                </div>
+
+                                {/* Dynamic Presets based on Category */}
+                                {(activeMotorCategory === 'TANK' ? [15, 20, 30, 45] : [3, 5, 10, 15]).map(m => (
+                                    <button 
+                                        key={m}
+                                        onClick={() => { setMotorDuration(m); setManualInput(''); }}
+                                        className={`h-14 rounded-xl border border-neutral-800 font-bold text-sm hover:bg-neutral-900 transition-all
+                                        ${motorDuration === m && !manualInput ? 'bg-white text-black border-white' : 'text-neutral-400'}`}
+                                    >
+                                        {m} MIN
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center justify-between px-4 py-3 border border-dashed border-neutral-800 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <Music className="w-4 h-4 text-neutral-500"/>
+                                <span className="text-xs text-neutral-400 truncate max-w-[150px]">
+                                    {customAudio ? customAudio.name : "System Glitch (Default)"}
+                                </span>
+                            </div>
+                            <label className="text-[10px] font-bold uppercase text-white bg-neutral-800 px-3 py-1.5 rounded cursor-pointer hover:bg-red-600 transition-colors">
+                                CHANGE
+                                <input type="file" accept="audio/*" className="hidden" onChange={(e) => {
+                                    if(e.target.files[0]) setCustomAudio({ name: e.target.files[0].name, url: URL.createObjectURL(e.target.files[0])});
+                                }}/>
+                            </label>
+                            </div>
+                        </div>
+                        )}
+
+                        <button 
+                            onClick={toggleMotor}
+                            className={`w-full h-20 rounded-[2rem] font-bold text-xl tracking-widest uppercase transition-all active:scale-[0.98] flex items-center justify-center gap-3
+                            ${isMotorRunning 
+                                ? 'bg-transparent border-2 border-red-600 text-red-600 hover:bg-red-950/30' 
+                                : 'bg-white text-black border-2 border-white hover:bg-neutral-200 shadow-[0_0_30px_rgba(255,255,255,0.1)]'}`}
+                        >
+                            {isMotorRunning 
+                                ? <><Square className="w-5 h-5 fill-current"/> ABORT</> 
+                                : <><Play className="w-5 h-5 fill-current"/> INITIATE</>}
+                        </button>
+                    </div>
+                    )}
+
+
+                    {/* === TAB: SAFETY === */}
+                    {activeTab === 'SAFETY' && (
+                    <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                        <div className={`relative p-6 rounded-3xl border overflow-hidden transition-colors duration-500
+                            ${verifiedTime ? 'bg-green-950/20 border-green-900/30' : 'bg-red-950/10 border-red-900/30'}`}>
+                            <DotBorder />
+                            <div className="relative z-10 flex justify-between items-start">
+                                <div>
+                                    <h2 className={`text-xl font-bold uppercase tracking-tighter ${verifiedTime ? 'text-green-500' : 'text-red-500'}`}>
+                                        {verifiedTime ? "Premises Secure" : "Security Breach"}
+                                    </h2>
+                                    <p className={`text-[10px] font-mono mt-1 ${verifiedTime ? 'text-green-400/70' : 'text-red-400/70'}`}>
+                                        {verifiedTime ? `VERIFIED TIMESTAMP: ${verifiedTime}` : "ACTION REQUIRED: COMPLETE CHECKLIST"}
+                                    </p>
+                                </div>
+                                {verifiedTime ? <Shield className="w-8 h-8 text-green-500"/> : <AlertTriangle className="w-8 h-8 text-red-600 animate-pulse"/>}
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-end">
+                            <button 
+                                onClick={() => setIsEditingSafety(!isEditingSafety)}
+                                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border transition-all
+                                ${isEditingSafety ? 'bg-red-600 text-white border-red-600' : 'bg-transparent text-neutral-500 border-neutral-800 hover:border-neutral-600'}`}
+                            >
+                                <Settings2 className="w-3 h-3" />
+                                {isEditingSafety ? "Done Editing" : "Edit List"}
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            {safetyItems.map(item => (
+                                <div key={item.id} className="flex gap-2 relative">
+                                    <button 
+                                        onClick={() => {
+                                            const newItems = safetyItems.map(i => i.id === item.id ? {...i, checked: !i.checked} : i);
+                                            setSafetyItems(newItems);
+                                            if(newItems.every(i => i.checked)) setVerifiedTime(new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+                                            else setVerifiedTime(null);
+                                        }}
+                                        className={`flex-1 flex items-center justify-between p-4 rounded-2xl border transition-all duration-200
+                                        ${item.checked 
+                                            ? 'bg-neutral-900 border-neutral-800 opacity-60' 
+                                            : 'bg-black border-neutral-700 hover:border-white'}`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${item.checked ? 'bg-neutral-800 text-neutral-500' : 'bg-white text-black'}`}>
+                                                {getIcon(item.icon, "w-4 h-4")}
+                                            </div>
+                                            <span className={`font-bold tracking-wide text-sm text-left ${item.checked ? 'line-through text-neutral-500' : 'text-white'}`}>
+                                                {item.label}
+                                            </span>
+                                        </div>
+                                        
+                                        <div className={`w-12 h-6 rounded-full relative transition-colors duration-300 flex-shrink-0 ${item.checked ? 'bg-neutral-700' : 'bg-neutral-800 border border-neutral-600'}`}>
+                                            <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform duration-300 ${item.checked ? 'translate-x-6 bg-neutral-400' : 'translate-x-0'}`}></div>
+                                        </div>
+                                    </button>
+                                    
+                                    {isEditingSafety && (
+                                        <div className="absolute right-0 top-0 bottom-0 w-16 bg-black flex items-center justify-center animate-in slide-in-from-right-4 fade-in duration-200 z-10 pl-2">
+                                            <button 
+                                                onClick={() => deleteSafetyItem(item.id)}
+                                                className="w-full h-full bg-red-950/50 border border-red-900 rounded-2xl flex items-center justify-center text-red-500 hover:bg-red-600 hover:text-white transition-colors"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="bg-neutral-900/50 border border-neutral-800 p-4 rounded-2xl flex gap-2 mt-4">
+                                <input 
+                                    type="text" 
+                                    placeholder="ADD CUSTOM PROTOCOL..."
+                                    className="flex-1 bg-transparent text-white text-sm font-mono uppercase outline-none placeholder-neutral-600"
+                                    value={newSafetyItem}
+                                    onChange={(e) => setNewSafetyItem(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && addSafetyItem()}
+                                />
+                                <button 
+                                    onClick={addSafetyItem}
+                                    disabled={!newSafetyItem}
+                                    className="bg-white text-black px-4 py-2 rounded-lg text-xs font-bold uppercase hover:bg-neutral-200 disabled:opacity-50"
+                                >
+                                    ADD
+                                </button>
+                        </div>
+
+                        {verifiedTime && (
+                            <button onClick={() => {setSafetyItems(safetyItems.map(i=>({...i, checked:false}))); setVerifiedTime(null)}}
+                                className="w-full py-4 border border-dashed border-neutral-700 rounded-full text-xs font-bold text-neutral-500 hover:text-white hover:border-white transition-all"
+                            >
+                                RESET PROTOCOLS
+                            </button>
+                        )}
+                    </div>
+                    )}
+
+
+                    {/* === TAB: GAS === */}
+                    {activeTab === 'GAS' && (
+                    <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                        
+                        {/* CURRENT CYLINDER STATUS */}
+                        {gasLogs.length > 0 ? (
+                            <div className="aspect-[4/3] bg-neutral-900 rounded-[2rem] border border-neutral-800 relative p-8 flex flex-col justify-between">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">Active Cylinder</span>
+                                        <span className="text-6xl font-bold tracking-tighter mt-2">{getDaysDiff(new Date(), gasLogs[0].date)}</span>
+                                        <span className="text-sm text-neutral-400">days used</span>
+                                    </div>
+                                    <Flame className="w-12 h-12 text-neutral-800" />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <div className="h-2 w-full bg-neutral-800 rounded-full overflow-hidden">
+                                        <div className="h-full bg-white" style={{width: `${Math.min(100, (getDaysDiff(new Date(), gasLogs[0].date) / 45) * 100)}%`}}></div>
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-neutral-500 font-mono">
+                                        <span>START: {new Date(gasLogs[0].date).toLocaleDateString()}</span>
+                                        <span>AVG LIFE: 45D</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="aspect-[4/3] bg-neutral-900 rounded-[2rem] border border-neutral-800 p-8 flex flex-col justify-center items-center text-center">
+                                <History className="w-12 h-12 text-neutral-700 mb-4" />
+                                <p className="text-neutral-400 text-sm">No Data Available</p>
+                                <p className="text-[10px] text-neutral-600 uppercase tracking-widest mt-1">Add a cylinder log to start</p>
+                            </div>
+                        )}
+
+                        {/* NEW LOG INPUT */}
+                        <div className="bg-black border border-neutral-800 p-1 rounded-2xl flex">
+                            <input 
+                                type="date" 
+                                className="flex-1 bg-transparent text-white px-4 text-sm font-mono uppercase outline-none"
+                                value={newGasDate}
+                                onChange={(e) => setNewGasDate(e.target.value)}
+                            />
+                            <button 
+                                onClick={addGasLog}
+                                disabled={!newGasDate}
+                                className="bg-white text-black px-6 py-3 rounded-xl text-xs font-bold uppercase hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                LOG NEW
+                            </button>
+                        </div>
+
+                        {/* HISTORY LOG LIST */}
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 px-2">
+                                <History className="w-3 h-3 text-neutral-500" />
+                                <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Log History</span>
+                            </div>
+                            
+                            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                {gasLogs.map((log, index) => {
+                                const isCurrent = index === 0;
+                                const prevLog = gasLogs[index - 1];
+                                
+                                let durationLabel = "ACTIVE";
+                                if (!isCurrent && prevLog) {
+                                    const daysLasted = getDaysDiff(prevLog.date, log.date);
+                                    durationLabel = `LASTED ${daysLasted} DAYS`;
+                                }
+
+                                return (
+                                    <div key={log.id} className="flex items-center justify-between p-4 border border-dashed border-neutral-800 rounded-xl group">
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-bold font-mono">
+                                            {new Date(log.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        </span>
+                                        <span className={`text-[10px] tracking-wider uppercase mt-0.5 ${isCurrent ? 'text-red-500 font-bold' : 'text-neutral-500'}`}>
+                                            {durationLabel}
+                                        </span>
+                                    </div>
+                                    <button 
+                                        onClick={() => deleteGasLog(log.id)}
+                                        className="p-2 rounded-full text-neutral-700 hover:text-red-600 hover:bg-neutral-900 transition-colors"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                    </div>
+                                );
+                                })}
+                                
+                                {gasLogs.length === 0 && (
+                                    <div className="text-center py-4 text-[10px] text-neutral-600 uppercase">History Empty</div>
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+                    )}
+
+                    {/* === TAB: RECHARGE === */}
+                    {activeTab === 'RECHARGE' && (
+                        <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                            
+                            {/* RECHARGE CATEGORY SWITCHER */}
+                            <div className="bg-neutral-900/50 p-1 rounded-xl border border-neutral-800 flex">
+                                <button 
+                                    onClick={() => setActiveRechargeCategory('MOBILE')}
+                                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2
+                                    ${activeRechargeCategory === 'MOBILE' ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'}`}
+                                >
+                                    <Smartphone className="w-3 h-3" />
+                                    MOBILE
+                                </button>
+                                <button 
+                                    onClick={() => setActiveRechargeCategory('WIFI')}
+                                    className={`flex-1 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2
+                                    ${activeRechargeCategory === 'WIFI' ? 'bg-white text-black shadow-lg' : 'text-neutral-500 hover:text-white'}`}
+                                >
+                                    <Router className="w-3 h-3" />
+                                    WIFI
+                                </button>
+                            </div>
+
+                            {/* PLANS LIST */}
+                            <div className="grid gap-4">
+                                {rechargeLogs.filter(log => (log.category || 'MOBILE') === activeRechargeCategory).map((log) => {
+                                    const { daysLeft, expiryDateStr } = getRechargeStatus(log);
+                                    const isExpired = daysLeft < 0;
+                                    const isUrgent = daysLeft >= 0 && daysLeft <= 5;
+
+                                    return (
+                                        <div key={log.id} className={`relative p-6 rounded-[2rem] border transition-all group
+                                            ${isExpired ? 'bg-neutral-900/50 border-red-900' : 
+                                            isUrgent ? 'bg-red-950/20 border-red-600 animate-pulse' : 
+                                            'bg-neutral-900 border-neutral-800'}`}>
+                                            
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-bold tracking-widest uppercase text-neutral-400">{log.name}</span>
+                                                        {isUrgent && <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>}
+                                                    </div>
+                                                    <div className="mt-2">
+                                                        <span className={`text-5xl font-bold tracking-tighter ${isExpired || isUrgent ? 'text-red-500' : 'text-white'}`}>
+                                                            {isExpired ? "EXP" : daysLeft}
+                                                        </span>
+                                                        <span className="text-sm text-neutral-500 ml-1">
+                                                            {isExpired ? "PIRED" : "days left"}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-3 flex items-center gap-3 text-[10px] font-mono text-neutral-400 border-t border-neutral-800 pt-3">
+                                                        <span className="bg-neutral-800 px-2 py-1 rounded text-white">₹{log.amount}</span>
+                                                        <span>EXP: {expiryDateStr}</span>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={() => deleteRecharge(log.id)}
+                                                    className="p-2 rounded-full hover:bg-neutral-800 text-neutral-600 hover:text-red-500 transition-colors"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                
+                                {rechargeLogs.filter(log => (log.category || 'MOBILE') === activeRechargeCategory).length === 0 && (
+                                    <div className="text-center py-12 border-2 border-dashed border-neutral-800 rounded-[2rem]">
+                                        {activeRechargeCategory === 'MOBILE' ? <Smartphone className="w-8 h-8 text-neutral-700 mx-auto mb-2" /> : <Router className="w-8 h-8 text-neutral-700 mx-auto mb-2" />}
+                                        <p className="text-neutral-500 text-sm">No {activeRechargeCategory} Plans</p>
+                                        <p className="text-[10px] text-neutral-700 mt-1">ADD PLAN BELOW</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ADD NEW FORM */}
+                            <div className="bg-black border border-neutral-800 p-4 rounded-[2rem] space-y-4">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-500 pl-2">Add New {activeRechargeCategory} Plan</p>
+                                
+                                <div className="grid grid-cols-2 gap-2">
+                                    <input 
+                                        placeholder={activeRechargeCategory === 'MOBILE' ? "NAME (E.G. MOM)" : "NAME (E.G. HOME WIFI)"} 
+                                        className="bg-neutral-900 rounded-xl px-4 py-3 text-xs font-bold text-white placeholder-neutral-600 outline-none focus:ring-1 focus:ring-white uppercase"
+                                        value={recName}
+                                        onChange={(e) => setRecName(e.target.value)}
+                                    />
+                                    <input 
+                                        type="number"
+                                        placeholder="AMOUNT (₹)" 
+                                        className="bg-neutral-900 rounded-xl px-4 py-3 text-xs font-bold text-white placeholder-neutral-600 outline-none focus:ring-1 focus:ring-white"
+                                        value={recAmount}
+                                        onChange={(e) => setRecAmount(e.target.value)}
+                                    />
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                    <div className="flex-1 bg-neutral-900 rounded-xl flex items-center px-3">
+                                        <span className="text-[10px] text-neutral-500 mr-2">DATE</span>
+                                        <input 
+                                            type="date" 
+                                            className="bg-transparent text-white text-xs font-bold outline-none w-full uppercase"
+                                            value={recDate}
+                                            onChange={(e) => setRecDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="w-1/3">
+                                        <input 
+                                            type="number"
+                                            placeholder="DAYS" 
+                                            className="w-full bg-neutral-900 rounded-xl px-4 py-3 text-xs font-bold text-white placeholder-neutral-600 outline-none focus:ring-1 focus:ring-white"
+                                            value={recValidity}
+                                            onChange={(e) => setRecValidity(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={addRecharge}
+                                    className="w-full bg-white text-black font-bold py-4 rounded-xl text-xs uppercase tracking-widest hover:bg-neutral-200 transition-colors"
+                                >
+                                    Confirm Recharge
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+
+                {/* --- BOTTOM DOCK --- */}
+                <div className="fixed bottom-0 left-0 w-full bg-black/90 backdrop-blur-xl border-t border-neutral-900 flex items-center justify-between z-50 pb-safe px-2">
+                    <NavButton label="MOTOR" icon={Square} active={activeTab === 'MOTOR'} onClick={() => setActiveTab('MOTOR')} />
+                    <div className="w-[1px] h-8 bg-neutral-900"></div>
+                    <NavButton label="SAFETY" icon={Shield} active={activeTab === 'SAFETY'} onClick={() => setActiveTab('SAFETY')} />
+                    <div className="w-[1px] h-8 bg-neutral-900"></div>
+                    <NavButton label="GAS LOG" icon={Flame} active={activeTab === 'GAS'} onClick={() => setActiveTab('GAS')} />
+                    <div className="w-[1px] h-8 bg-neutral-900"></div>
+                    <NavButton label="RECHARGE" icon={Smartphone} active={activeTab === 'RECHARGE'} onClick={() => setActiveTab('RECHARGE')} />
+                </div>
+
+                </div>
+            );
+            }
+
+        // Render
+        const root = createRoot(document.getElementById('root'));
+        root.render(<NothingUltimate />);
+    </script>
+</body>
+</html>
